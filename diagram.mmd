@@ -1,0 +1,54 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'background': '#ffffff', 'lineColor': '#000000', 'primaryTextColor': '#000000', 'clusterBkg': '#ffffff', 'clusterBorder': '#333333'}}}%%
+graph TD
+    classDef hardware fill:#2003ff,stroke:#333333,stroke-width:2px,color:#ffffff;
+    classDef software fill:#ff0303,stroke:#333333,stroke-width:1px,color:#ffffff;
+    classDef output fill:#8503ff,stroke:#333333,stroke-width:2px,color:#ffffff;
+
+    subgraph Oras["Belaidis Kanalas (Oras)"]
+        RF_Signal["RF Signalas<br>(BLE 2.4 GHz)"]
+    end
+
+    subgraph Imtuvas["ESP32-WROOM-32 Imtuvas (RX)"]
+        Antenna["Antena"]:::hardware
+        BLE_PHY["BLE Radijo Modulis<br>(PHY Layer)"]:::hardware
+
+        subgraph Firmware["Programinė Įranga (Firmware)"]
+            BLE_Stack["BLE Protokolo Stekas<br>(NimBLE Client, Scanning, Notify)"]:::software
+            RSSI_Meas["RSSI Matavimas"]:::software
+            Frame_Parser["Kadro Sinchronizacija ir<br>Klaidų Aptikimas (CRC8)"]:::software
+            Hamming_Dec["Kanalo Dekoderis<br>(Hamming(7,4) Taisymas)"]:::software
+            Morse_Dec["Šaltinio Dekoderis<br>(Morzė -> Tekstas)"]:::software
+            Metrics_Calc["Metrikų Skaičiavimas<br>(BER, Efektyvumas, Kadrų statistika)"]:::software
+            Main_Logic["Pagrindinė Valdymo Logika<br>(Būsenų valdymas)"]:::software
+        end
+
+        I2C_Driver["I2C Sąsaja / SSD1306 Draiveris"]:::hardware
+    end
+
+    subgraph Vartotojo_Sasaja["Vartotojo Sąsaja"]
+        OLED["OLED Ekranas"]:::output
+    end
+
+    RF_Signal --> Antenna
+    Antenna --> BLE_PHY
+    BLE_PHY --> BLE_Stack
+    BLE_PHY -- "Signalo stiprumas" --> RSSI_Meas
+
+    BLE_Stack -- "Neapdoroti duomenys (Raw Payload)" --> Frame_Parser
+    BLE_Stack -- "Prisijungimo būsena" --> Main_Logic
+    
+    RSSI_Meas -- "RSSI (dBm)" --> Main_Logic
+    
+    Frame_Parser -- "Geras kadras (Payload)" --> Hamming_Dec
+    Frame_Parser -- "Blogas kadras (Statusas)" --> Main_Logic
+    Frame_Parser -- "Kadrų skaitikliai (OK/Bad)" --> Metrics_Calc
+
+    Hamming_Dec -- "Dekoduoti Morzės simboliai (ASCII)" --> Morse_Dec
+    Hamming_Dec -- "Taisymo statistika (Bitai/Klaidos)" --> Metrics_Calc
+    
+    Morse_Dec -- "Galutinis Tekstas" --> Main_Logic
+    
+    Metrics_Calc -- "BER, Eff (%)" --> Main_Logic
+    
+    Main_Logic -- "Būsena, Tekstas, Morzė, RSSI, Metrikos" --> I2C_Driver
+    I2C_Driver --> OLED
