@@ -1,52 +1,57 @@
-%%{init: {'theme': 'base', 'themeVariables': { 'background': '#ffffff', 'lineColor': '#000000', 'primaryTextColor': '#000000', 'clusterBkg': '#ffffff', 'clusterBorder': '#333333'}}}%%
+%%{init: {'theme': 'dark', 'themeVariables': { 'background': '#1a1a1a', 'lineColor': '#ffffff', 'primaryTextColor': '#ffffff', 'clusterBkg': '#2d2d2d', 'clusterBorder': '#888888'}}}%%
 graph TD
-    classDef hardware fill:#2003ff,stroke:#333333,stroke-width:2px,color:#ffffff;
-    classDef software fill:#ff0303,stroke:#333333,stroke-width:1px,color:#ffffff;
-    classDef output fill:#8503ff,stroke:#333333,stroke-width:2px,color:#ffffff;
+    linkStyle default stroke:#ffffff,color:ffffff;
+    
+    classDef hardware fill:#2003ff,stroke:#aaaaaa,stroke-width:2px,color:#ffffff;
+    classDef software fill:#ff0303,stroke:#aaaaaa,stroke-width:1px,color:#ffffff;
+    classDef output fill:#8503ff,stroke:#aaaaaa,stroke-width:2px,color:#ffffff;
 
     subgraph Oras["Belaidis Kanalas (Oras)"]
-        RF_Signal["RF Signalas<br>(BLE 2.4 GHz)"]
+        RF_Signal["RF Signalas<br>(Wi-Fi 2.4 GHz)"]
     end
 
     subgraph Imtuvas["ESP32-WROOM-32 Imtuvas (RX)"]
         Antenna["Antena"]:::hardware
-        BLE_PHY["BLE Radijo Modulis<br>(PHY Layer)"]:::hardware
+        WiFi_PHY["Wi-Fi Radijo Modulis<br>(PHY Layer)"]:::hardware
 
         subgraph Firmware["Programinė Įranga (Firmware)"]
-            BLE_Stack["BLE Protokolo Stekas<br>(NimBLE Client, Scanning, Notify)"]:::software
+            WiFi_UDP_Stack["Wi-Fi / UDP Stekas<br>(WiFi.h, WiFiUDP.h)"]:::software
             RSSI_Meas["RSSI Matavimas"]:::software
-            Frame_Parser["Kadro Sinchronizacija ir<br>Klaidų Aptikimas (CRC8)"]:::software
+            Packet_Parser["Paketo Apdorojimas<br>(UDP Parse, SYNC)"]:::software
             Hamming_Dec["Kanalo Dekoderis<br>(Hamming(7,4) Taisymas)"]:::software
+            ARQ_Logic["ARQ Valdymas<br>(NACK Siuntimas)"]:::software
             Morse_Dec["Šaltinio Dekoderis<br>(Morzė -> Tekstas)"]:::software
-            Metrics_Calc["Metrikų Skaičiavimas<br>(BER, Efektyvumas, Kadrų statistika)"]:::software
-            Main_Logic["Pagrindinė Valdymo Logika<br>(Būsenų valdymas)"]:::software
+            Metrics_Calc["Metrikų Skaičiavimas<br>(BER, Efektyvumas)"]:::software
+            Main_Logic["Pagrindinė Valdymo Logika<br>(Laikmačiai, Būsenos)"]:::software
         end
 
-        I2C_Driver["I2C Sąsaja / SSD1306 Draiveris"]:::hardware
+        I2C_Driver["I2C Sąsaja / SH1106G Draiveris"]:::hardware
     end
 
     subgraph Vartotojo_Sasaja["Vartotojo Sąsaja"]
         OLED["OLED Ekranas"]:::output
     end
 
-    RF_Signal --> Antenna
-    Antenna --> BLE_PHY
-    BLE_PHY --> BLE_Stack
-    BLE_PHY -- "Signalo stiprumas" --> RSSI_Meas
+    RF_Signal <-->|RX Duomenys / TX NACK| Antenna
+    Antenna <--> WiFi_PHY
+    WiFi_PHY <--> WiFi_UDP_Stack
+    WiFi_PHY -- "Signalo stiprumas" --> RSSI_Meas
 
-    BLE_Stack -- "Neapdoroti duomenys (Raw Payload)" --> Frame_Parser
-    BLE_Stack -- "Prisijungimo būsena" --> Main_Logic
+    WiFi_UDP_Stack -- "Gautas UDP paketas" --> Packet_Parser
     
     RSSI_Meas -- "RSSI (dBm)" --> Main_Logic
     
-    Frame_Parser -- "Geras kadras (Payload)" --> Hamming_Dec
-    Frame_Parser -- "Blogas kadras (Statusas)" --> Main_Logic
-    Frame_Parser -- "Kadrų skaitikliai (OK/Bad)" --> Metrics_Calc
-
-    Hamming_Dec -- "Dekoduoti Morzės simboliai (ASCII)" --> Morse_Dec
-    Hamming_Dec -- "Taisymo statistika (Bitai/Klaidos)" --> Metrics_Calc
+    Packet_Parser -- "Skaitiniai duomenys" --> Hamming_Dec
+    Packet_Parser -- "Blogas formatas" --> ARQ_Logic
+    Packet_Parser -- "Paketų statistika" --> Metrics_Calc
     
-    Morse_Dec -- "Galutinis Tekstas" --> Main_Logic
+    Hamming_Dec -- "Dekoduoti 4 bitai (Nibble)" --> Morse_Dec
+    Hamming_Dec -- "Neištaisoma klaida" --> ARQ_Logic
+    Hamming_Dec -- "Taisymo statistika" --> Metrics_Calc
+    
+    ARQ_Logic -- "NACK Užklausa" --> WiFi_UDP_Stack
+    
+    Morse_Dec -- "Tekstas, Morzės seka" --> Main_Logic
     
     Metrics_Calc -- "BER, Eff (%)" --> Main_Logic
     
